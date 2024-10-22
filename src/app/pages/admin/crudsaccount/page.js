@@ -17,7 +17,7 @@ export default function UserManagement() {
   useEffect(() => {
     const fetchUsers = async () => {
       try {
-        const response = await axios.get('http://localhost:5000/api/users');
+        const response = await axios.get('http://localhost:5000/api/users/create_users');
         setUsers(response.data);
       } catch (error) {
         console.error('Error fetching users:', error);
@@ -58,10 +58,42 @@ export default function UserManagement() {
     setSelectedUsers(updatedSelectedUsers);
   };
 
+  // Helper function to format the date to dd/mm/yyyy
+  const formatDob = (value) => {
+    const cleanValue = value.replace(/\D/g, ''); // Remove all non-digit characters
+    if (cleanValue.length >= 5) {
+      return `${cleanValue.slice(0, 2)}/${cleanValue.slice(2, 4)}/${cleanValue.slice(4, 8)}`;
+    } else if (cleanValue.length >= 3) {
+      return `${cleanValue.slice(0, 2)}/${cleanValue.slice(2, 4)}`;
+    } else if (cleanValue.length >= 1) {
+      return cleanValue;
+    }
+    return '';
+  };
+
+  // Validate DOB format (dd/mm/yyyy)
+  const validateDob = (dob) => {
+    const regex = /^(0[1-9]|[12][0-9]|3[01])\/(0[1-9]|1[0-2])\/\d{4}$/;
+    return regex.test(dob);
+  };
+
+  // Handle DOB change to format and limit characters
+  const handleDobChange = (e) => {
+    const input = e.target.value;
+    const formattedDob = formatDob(input);
+    setDob(formattedDob);
+  };
+
   // Add New User
   const handleAddUser = async () => {
-    if (!firstname || !lastname || !dob || !email || !password) {
+    if (!firstname || !lastname || !dob || !email || !password || !accountType) {
       alert('Please fill in all the fields.');
+      return;
+    }
+
+    // Validate DOB before proceeding
+    if (!validateDob(dob)) {
+      alert('Invalid DOB format. Please enter the date in dd/mm/yyyy format.');
       return;
     }
 
@@ -70,16 +102,18 @@ export default function UserManagement() {
       dob,
       email,
       password,
+      user_profile: accountType, // Sending account type as 'user_profile'
     };
 
     try {
-      const response = await axios.post('http://localhost:5000/api/users', newUser);
+      const response = await axios.post('http://localhost:5000/api/users/create_user', newUser);
       setUsers([...users, response.data]); // Update user list with new user
       setFirstName('');
       setLastName('');
       setDob('');
       setEmail('');
       setPassword('');
+      setAccountType('');
       console.log('User added successfully:', response.data);
     } catch (error) {
       console.error('Error adding user:', error);
@@ -110,7 +144,8 @@ export default function UserManagement() {
             type="text"
             placeholder="dd/mm/yyyy"
             value={dob}
-            onChange={(e) => setDob(e.target.value)}
+            onChange={handleDobChange}  // Apply formatting as user types
+            maxLength="10"              // Prevent entering more than 10 characters
             className="border p-2 rounded w-full md:w-1/3 focus:outline-none text-black"
           />
           <input
@@ -134,7 +169,7 @@ export default function UserManagement() {
             onChange={(e) => setAccountType(e.target.value)}
             className="border p-2 rounded w-full md:w-1/3 focus:outline-none text-gray-400"
           >
-            <option value="" disabled>Select Account Type</option> {/* Placeholder option, set to disabled = they need to choose one of the options*/}
+            <option value="" disabled>Select Account Type</option>
             <option value="buyer">Buyer</option>
             <option value="seller">Seller</option>
             <option value="usedCarAgent">Used Car Agent</option>
@@ -149,7 +184,7 @@ export default function UserManagement() {
         </div>
       </div>
 
-     
+      {/* Search and Suspend section */}
       <div className="bg-gray-800 p-4 rounded-lg shadow-lg mb-8">
         <div className="flex justify-center items-center space-x-4">
           <input
@@ -159,7 +194,6 @@ export default function UserManagement() {
             onChange={(e) => setSearchTerm(e.target.value)}
             className="border p-2 rounded w-full md:w-1/3 focus:outline-none text-black"
           />
-           {/* Search and suspend buttons */}
           <button
             onClick={handleSearch}
             className="bg-blue-500 text-white p-2 rounded hover:bg-blue-700"
@@ -194,28 +228,20 @@ export default function UserManagement() {
                   <td className="py-3 px-6">
                     <input
                       type="checkbox"
-                      checked={selectedUsers.has(user.id)}
                       onChange={() => handleCheckboxChange(user.id)}
                     />
                   </td>
-                  <td className="py-3 px-6">{user.name}</td>
-                  <td className="py-3 px-6">{user.email}</td>
-                  <td className="py-3 px-6">{user.dob}</td>
-                  <td className="py-3 px-6">
-                    <button
-                      onClick={() => handleDelete(user.id)}
-                      className="bg-red-500 text-white p-2 rounded hover:bg-red-700"
-                    >
-                      Delete
-                    </button>
+                  <td className="py-3 px-6 text-center">{user.name}</td>
+                  <td className="py-3 px-6 text-center">{user.email}</td>
+                  <td className="py-3 px-6 text-center">{user.dob}</td>
+                  <td className="py-3 px-6 text-center">
+                    {/* Add action buttons here if needed */}
                   </td>
                 </tr>
               ))
             ) : (
-              <tr className="border-b border-gray-300">
-                <td colSpan="5" className="py-3 px-6 text-center text-black">
-                  No users found. Please add a new account.
-                </td>
+              <tr>
+                <td colSpan="5" className="text-center py-3">No users found</td>
               </tr>
             )}
           </tbody>
