@@ -1,4 +1,4 @@
-"use client"; // Use the "use client" directive
+"use client";
 
 import { useEffect, useState } from 'react';
 import axios from 'axios';
@@ -11,89 +11,99 @@ export default function UserManagement() {
   const [dob, setDob] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [accountType, setAccountType] = useState(''); // State for account type (default to empty string)
-  const [selectedUsers, setSelectedUsers] = useState(new Set()); // State for selected users
+  const [accountType, setAccountType] = useState('');
+  const [selectedUsers, setSelectedUsers] = useState(new Set());
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  // Replace with your actual token
+  const token = process.env.NEXT_PUBLIC_API_TOKEN || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJmcmVzaCI6ZmFsc2UsImlhdCI6MTcyOTY3NjU5OSwianRpIjoiOTRiNTYxNGYtMDYxNi00MTZkLWE5NzEtYzhmMWE0MDdjODBiIiwidHlwZSI6ImFjY2VzcyIsInN1YiI6eyJlbWFpbCI6ImFkbWluQGFkbWluLmNvbSIsInVzZXJfcHJvZmlsZSI6ImFkbWluIn0sIm5iZiI6MTcyOTY3NjU5OSwiY3NyZiI6ImY0MmRlY2NhLTQ2NGMtNDdiOC1hNTExLTViMDA0NmRlZGMwMCIsImV4cCI6MTcyOTY3NzQ5OX0.Lnv8Ft5hAjf1s8F0OV9uqQfqR6wuSs2puVAXLZdcBFw';
 
   useEffect(() => {
-    const fetchUsers = async () => {
-      try {
-        const response = await axios.get('http://localhost:5000/api/users/create_users');
-        setUsers(response.data);
-      } catch (error) {
-        console.error('Error fetching users:', error);
-      }
-    };
-
+    axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
     fetchUsers();
   }, []);
 
-  const filteredUsers = users.filter(user =>
-    user.name.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  // Fetch users from the API
+  const fetchUsers = async () => {
+    setIsLoading(true);
+    setError('');
+    try {
+      const response = await axios.get('http://localhost:5000/api/users/search_user', {
+        params: {
+          search: searchTerm // Add search term to query
+        }
+      });
+      setUsers(response.data.account_list);
+    } catch (error) {
+      setError('Failed to fetch users. Please try again.');
+      console.error('Error fetching users:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const handleSearch = () => {
-    console.log('Searching for:', searchTerm);
+    fetchUsers();
   };
 
   const handleSuspend = async () => {
-    for (const userId of selectedUsers) {
-      try {
-        await axios.post(`http://localhost:5000/api/users/suspend/${userId}`);
-        setUsers(users.filter(user => user.id !== userId)); // Remove suspended user from the list
-        console.log(`User with ID ${userId} suspended.`);
-      } catch (error) {
-        console.error('Error suspending user:', error);
-      }
+    if (selectedUsers.size === 0) {
+      alert('Please select users to suspend');
+      return;
     }
-    setSelectedUsers(new Set()); // Clear selected users after action
+
+    setIsLoading(true);
+    setError('');
+    try {
+      for (const userId of selectedUsers) {
+        await axios.post(`http://localhost:5000/api/users/suspend/${userId}`);
+      }
+      setSelectedUsers(new Set());
+      fetchUsers();
+      alert('Selected users have been suspended successfully');
+    } catch (error) {
+      setError('Failed to suspend users. Please try again.');
+      console.error('Error suspending users:', error);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleCheckboxChange = (userId) => {
     const updatedSelectedUsers = new Set(selectedUsers);
     if (updatedSelectedUsers.has(userId)) {
-      updatedSelectedUsers.delete(userId); // Unselect user
+      updatedSelectedUsers.delete(userId);
     } else {
-      updatedSelectedUsers.add(userId); // Select user
+      updatedSelectedUsers.add(userId);
     }
     setSelectedUsers(updatedSelectedUsers);
   };
 
-  // Helper function to format the date to dd/mm/yyyy
-  const formatDob = (value) => {
-    const cleanValue = value.replace(/\D/g, ''); // Remove all non-digit characters
-    if (cleanValue.length >= 5) {
-      return `${cleanValue.slice(0, 2)}/${cleanValue.slice(2, 4)}/${cleanValue.slice(4, 8)}`;
-    } else if (cleanValue.length >= 3) {
-      return `${cleanValue.slice(0, 2)}/${cleanValue.slice(2, 4)}`;
-    } else if (cleanValue.length >= 1) {
-      return cleanValue;
-    }
-    return '';
+  const validateEmail = (email) => {
+    const regex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return regex.test(email);
   };
 
-  // Validate DOB format (dd/mm/yyyy)
-  const validateDob = (dob) => {
-    const regex = /^(0[1-9]|[12][0-9]|3[01])\/(0[1-9]|1[0-2])\/\d{4}$/;
-    return regex.test(dob);
-  };
-
-  // Handle DOB change to format and limit characters
-  const handleDobChange = (e) => {
-    const input = e.target.value;
-    const formattedDob = formatDob(input);
-    setDob(formattedDob);
-  };
-
-  // Add New User
   const handleAddUser = async () => {
+    // Form validation
     if (!firstname || !lastname || !dob || !email || !password || !accountType) {
       alert('Please fill in all the fields.');
       return;
     }
 
-    // Validate DOB before proceeding
     if (!validateDob(dob)) {
-      alert('Invalid DOB format. Please enter the date in dd/mm/yyyy format.');
+      alert('Invalid date format. Please use YYYY/MM/DD and ensure the date is valid.');
+      return;
+    }
+
+    if (!validateEmail(email)) {
+      alert('Please enter a valid email address.');
+      return;
+    }
+
+    if (password.length < 8) {
+      alert('Password must be at least 8 characters long.');
       return;
     }
 
@@ -102,29 +112,42 @@ export default function UserManagement() {
       dob,
       email,
       password,
-      user_profile: accountType, // Sending account type as 'user_profile'
+      user_profile: accountType,
     };
 
+    setIsLoading(true);
+    setError('');
     try {
-      const response = await axios.post('http://localhost:5000/api/users/create_user', newUser);
-      setUsers([...users, response.data]); // Update user list with new user
+      await axios.post('http://localhost:5000/api/users/create_user', newUser);
+      fetchUsers();
+      // Clear form
       setFirstName('');
       setLastName('');
       setDob('');
       setEmail('');
       setPassword('');
       setAccountType('');
-      console.log('User added successfully:', response.data);
+      alert('User added successfully!');
     } catch (error) {
+      setError('Failed to add user. Please try again.');
       console.error('Error adding user:', error);
+    } finally {
+      setIsLoading(false);
     }
   };
 
   return (
     <div className="min-h-screen bg-gray-500 p-6">
+      {/* Error display */}
+      {error && (
+        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4">
+          {error}
+        </div>
+      )}
+
       {/* Add new account section */}
       <div className="bg-gray-800 p-8 rounded-lg shadow-lg mb-8">
-        <h2 className="text-4xl text-center font-bold mb-6">Add new account</h2>
+        <h2 className="text-4xl text-center font-bold mb-6 text-white">Add new account</h2>
         <div className="flex flex-col space-y-4 items-center">
           <input
             type="text"
@@ -132,6 +155,7 @@ export default function UserManagement() {
             value={firstname}
             onChange={(e) => setFirstName(e.target.value)}
             className="border p-2 rounded w-full md:w-1/3 focus:outline-none text-black"
+            disabled={isLoading}
           />
           <input
             type="text"
@@ -139,21 +163,23 @@ export default function UserManagement() {
             value={lastname}
             onChange={(e) => setLastName(e.target.value)}
             className="border p-2 rounded w-full md:w-1/3 focus:outline-none text-black"
+            disabled={isLoading}
           />
+          
           <input
             type="text"
-            placeholder="dd/mm/yyyy"
-            value={dob}
-            onChange={handleDobChange}  // Apply formatting as user types
-            maxLength="10"              // Prevent entering more than 10 characters
+            placeholder="yyyy/mm/dd"
+      
             className="border p-2 rounded w-full md:w-1/3 focus:outline-none text-black"
           />
+          
           <input
             type="email"
             placeholder="Email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             className="border p-2 rounded w-full md:w-1/3 focus:outline-none text-black"
+            disabled={isLoading}
           />
           <input
             type="password"
@@ -161,13 +187,14 @@ export default function UserManagement() {
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             className="border p-2 rounded w-full md:w-1/3 focus:outline-none text-black"
+            disabled={isLoading}
           />
 
-          {/* Dropdown for account type with placeholder */}
           <select
             value={accountType}
             onChange={(e) => setAccountType(e.target.value)}
-            className="border p-2 rounded w-full md:w-1/3 focus:outline-none text-gray-400"
+            className="border p-2 rounded w-full md:w-1/3 focus:outline-none text-gray-700"
+            disabled={isLoading}
           >
             <option value="" disabled>Select Account Type</option>
             <option value="buyer">Buyer</option>
@@ -177,9 +204,10 @@ export default function UserManagement() {
 
           <button
             onClick={handleAddUser}
-            className="bg-green-500 text-white p-2 rounded hover:bg-green-700 w-full md:w-1/3"
+            className={`bg-green-500 text-white p-2 rounded hover:bg-green-700 w-full md:w-1/3 ${isLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
+            disabled={isLoading}
           >
-            Add
+            {isLoading ? 'Adding...' : 'Add'}
           </button>
         </div>
       </div>
@@ -193,56 +221,68 @@ export default function UserManagement() {
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="border p-2 rounded w-full md:w-1/3 focus:outline-none text-black"
+            disabled={isLoading}
           />
-          <button
+          <button 
             onClick={handleSearch}
-            className="bg-blue-500 text-white p-2 rounded hover:bg-blue-700"
+            className={`bg-blue-500 text-white p-2 rounded hover:bg-blue-700 ${isLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
+            disabled={isLoading}
           >
-            Search
-          </button>
-          <button
-            onClick={handleSuspend}
-            className="bg-red-500 text-white p-2 rounded hover:bg-red-700"
-          >
-            Suspend
+            {isLoading ? 'Searching...' : 'Search'}
           </button>
         </div>
+        <button
+          onClick={handleSuspend}
+          className={`bg-red-500 text-white p-2 rounded hover:bg-red-700 mt-4 ${isLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
+          disabled={isLoading}
+        >
+          {isLoading ? 'Suspending...' : 'Suspend'}
+        </button>
       </div>
 
-      {/* User list table */}
-      <div className="bg-gray-800 p-4 rounded-lg shadow-lg">
-        <table className="min-w-full bg-red-400 border-black rounded-lg overflow-hidden">
+      {/* Users table */}
+      <div className="overflow-x-auto">
+        <table className="min-w-full bg-gray-800 text-white">
           <thead>
-            <tr className="bg-gray-200 text-gray-600 uppercase text-sm leading-normal">
-              <th className="py-3 px-6 text-center">Select</th>
-              <th className="py-3 px-6 text-center">Name</th>
-              <th className="py-3 px-6 text-center">Email</th>
-              <th className="py-3 px-6 text-center">DOB</th>
-              <th className="py-3 px-6 text-center">Actions</th>
+            <tr>
+              <th className="py-2 px-4 border-b">Select</th>
+              <th className="py-2 px-4 border-b">Email</th>
+              <th className="py-2 px-4 border-b">Password</th>
+              <th className="py-2 px-4 border-b">Firstname</th>
+              <th className="py-2 px-4 border-b">Lastname</th>
+              <th className="py-2 px-4 border-b">DOB</th>
             </tr>
           </thead>
-          <tbody className="text-sm font-light">
-            {filteredUsers.length > 0 ? (
-              filteredUsers.map(user => (
-                <tr key={user.id} className="border-b hover:bg-gray-100">
-                  <td className="py-3 px-6">
-                    <input
-                      type="checkbox"
-                      onChange={() => handleCheckboxChange(user.id)}
-                    />
-                  </td>
-                  <td className="py-3 px-6 text-center">{user.name}</td>
-                  <td className="py-3 px-6 text-center">{user.email}</td>
-                  <td className="py-3 px-6 text-center">{user.dob}</td>
-                  <td className="py-3 px-6 text-center">
-                    {/* Add action buttons here if needed */}
-                  </td>
-                </tr>
-              ))
-            ) : (
+          <tbody>
+            {isLoading ? (
               <tr>
-                <td colSpan="5" className="text-center py-3">No users found</td>
+                <td colSpan="6" className="py-4 text-center">Loading...</td>
               </tr>
+            ) : users.length === 0 ? (
+              <tr>
+                <td colSpan="6" className="py-4 text-center">No users found</td>
+              </tr>
+            ) : (
+              users.map((user) => {
+               
+                return (
+                  <tr key={user.id}>
+                    <td className="py-2 px-4 border-b">
+                      <input
+                        type="checkbox"
+                        checked={selectedUsers.has(user.id)}
+                        onChange={() => handleCheckboxChange(user.id)}
+                        disabled={isLoading}
+                      />
+                    </td>
+                    <td className="py-2 px-4 border-b">{user.email}</td>
+                    <td className="py-2 px-4 border-b">********</td>
+                    <td className="py-2 px-4 border-b">{user.first_name}</td>
+                    <td className="py-2 px-4 border-b">{user.last_name}</td>
+                    <td className="py-2 px-4 border-b">{user.dob}</td>
+                  </tr>
+                );
+              })
             )}
           </tbody>
         </table>
